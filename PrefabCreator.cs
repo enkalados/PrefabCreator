@@ -5,11 +5,14 @@ using UnityEditor;
 
 public class PrefabCreator : MonoBehaviour
 {
+    //1.2
     #region Parameters
     public string parentObjectName;
-    public GameObject prefab;
+    public List<GameObject> prefabs;
+    public bool shuffle;
+    public bool randomGenerate;
     public Vector3 startPosition;
-    public bool isFixedDistance;
+    public bool zValueRange;
     public bool isRandomX;
     public bool isRandomY;
 
@@ -23,37 +26,96 @@ public class PrefabCreator : MonoBehaviour
     #region My Methods
     public void InstantiateObjects()
     {
-        GameObject parentObject = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
-        parentObject.transform.position = Vector3.zero;
-        PrefabUtility.UnpackPrefabInstance(parentObject, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-        parentObject.name = parentObjectName;
-        foreach (var comp in parentObject.GetComponents<Component>())
+        if (CheckSafe())
         {
-            if (!(comp is Transform))
-            {
-                DestroyImmediate(comp);
-            }
+            return;
         }
+        GameObject parentObject = new GameObject();
+        parentObject.transform.position = Vector3.zero;
+        parentObject.name = parentObjectName;
 
         if (numberOfObjects > 0)
         {
+            int k = 0;
             for (int i = 0; i < numberOfObjects; i++)
             {
-                GameObject obj = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parentObject.transform);
+                if (randomGenerate)
+                {
+                    k = Random.Range(0, prefabs.Count);
+                }
+                GameObject obj = (GameObject)PrefabUtility.InstantiatePrefab(prefabs[k], parentObject.transform);
                 obj.transform.localPosition = new Vector3(Random.Range(minX, maxX), Random.Range(minY, maxY), minZ * i);
+                k++;
+                if (k >= prefabs.Count)
+                {
+                    k = 0;
+                }
             }
         }
         else
         {
             int i = 0;
-            GameObject obj = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parentObject.transform);
+            int k = 0;
+            if (randomGenerate)
+            {
+                k = Random.Range(0, prefabs.Count);
+            }
+            GameObject obj = (GameObject)PrefabUtility.InstantiatePrefab(prefabs[k], parentObject.transform);
             obj.transform.localPosition = new Vector3(Random.Range(minX, maxX), Random.Range(minY, maxY), minZ + (distance * i));
             while (obj.transform.localPosition.z + distance < maxZ)
             {
                 i++;
-                obj = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parentObject.transform);
+                k++;
+                if (k >= prefabs.Count)
+                {
+                    k = 0;
+                }
+                if (randomGenerate)
+                {
+                    k = Random.Range(0, prefabs.Count);
+                }
+                obj = (GameObject)PrefabUtility.InstantiatePrefab(prefabs[k], parentObject.transform);
                 obj.transform.localPosition = new Vector3(Random.Range(minX, maxX), Random.Range(minY, maxY), minZ + (distance * i));
             }
+        }
+    }
+    public void Shuffle<T>(List<T> ts)
+    {
+        var count = ts.Count;
+        var last = count - 1;
+        for (var i = 0; i < last; ++i)
+        {
+            var r = UnityEngine.Random.Range(i, count);
+            var tmp = ts[i];
+            ts[i] = ts[r];
+            ts[r] = tmp;
+        }
+    }
+    private bool CheckSafe()
+    {
+        if (distance <= 0)
+        {
+            Debug.LogError("Please enter positive number for distance");
+            return true;
+        }
+        else if (minX > maxX)
+        {
+            Debug.LogError("minX must be less than maxX");
+            return true;
+        }
+        else if (minZ > maxZ)
+        {
+            Debug.LogError("minZ must be less than maxZ");
+            return true;
+        }
+        else if (minY > maxY)
+        {
+            Debug.LogError("minY must be less than maxY");
+            return true;
+        }
+        else
+        {
+            return false;
         }
     }
     #endregion
@@ -72,23 +134,35 @@ public class CreatorEditor : Editor
 
         GUILayout.Label("Base Settings", EditorStyles.boldLabel);
         creator.parentObjectName = EditorGUILayout.TextField("Parent Object Name:", creator.parentObjectName);
-        creator.prefab = (GameObject)EditorGUILayout.ObjectField("Prefab: ", creator.prefab, typeof(GameObject), true);
+        serializedObject.Update();
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("prefabs"));
+
+        GUILayout.Label("Prefab List Generate Settings", EditorStyles.boldLabel);
+        GUILayout.BeginHorizontal();
+        GUILayout.Label("Suffle List:", EditorStyles.label);
+        if (GUILayout.Button("Shuffle"))
+        {
+            creator.Shuffle(creator.prefabs);
+        }
+        GUILayout.EndHorizontal();
+
+        creator.randomGenerate = GUILayout.Toggle(creator.randomGenerate, "Random Generate");
 
         GUILayout.Label("Distance(Z) Value Set", EditorStyles.boldLabel);
-        creator.isFixedDistance = GUILayout.Toggle(creator.isFixedDistance, "Is Fixed Distance");
-        if (creator.isFixedDistance)
-        {
-            creator.distance = EditorGUILayout.FloatField("Distance:", creator.distance);
-            creator.minZ = creator.distance;
-            creator.maxZ = creator.distance;
-            creator.numberOfObjects = EditorGUILayout.IntField("Number Of Objects:", creator.numberOfObjects);
-        }
-        else
+        creator.zValueRange = GUILayout.Toggle(creator.zValueRange, "Z Value Range");
+        if (creator.zValueRange)
         {
             creator.distance = EditorGUILayout.FloatField("Distance:", creator.distance);
             creator.minZ = EditorGUILayout.FloatField("Min Z:", creator.minZ);
             creator.maxZ = EditorGUILayout.FloatField("Max Z:", creator.maxZ);
             creator.numberOfObjects = 0;
+        }
+        else
+        {
+            creator.distance = EditorGUILayout.FloatField("Distance:", creator.distance);
+            creator.minZ = creator.distance;
+            creator.maxZ = creator.distance;
+            creator.numberOfObjects = EditorGUILayout.IntField("Number Of Objects:", creator.numberOfObjects);
         }
 
         GUILayout.Label("X Value Set", EditorStyles.boldLabel);
